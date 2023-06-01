@@ -1,6 +1,6 @@
 import { readFileSync } from 'fs'
 import { BackblazeB2 } from '../src'
-import { isNotNil, timestamp } from "@heyooo-inc/utils";
+import { isNotNil, timestamp } from '@heyooo-inc/utils'
 
 describe('BackblazeB2', () => {
   let b2: BackblazeB2
@@ -13,17 +13,17 @@ describe('BackblazeB2', () => {
   })
 
   test('should upload file', async () => {
-    const { authorizationToken, uploadUrl } = await b2.getUploadUrl(
-      process.env.BACKBLAZE_BUCKET_ID as string
-    )
+    const { authorizationToken, uploadUrl } = await b2.getUploadUrl(process.env.BACKBLAZE_BUCKET_ID as string)
+    const fileName = timestamp() + '-package.json'
     const result = await b2.uploadFile({
       file: readFileSync('./package.json'),
-      fileName: timestamp() + '-package.json',
+      fileName,
       contentType: 'text/json',
       authorizationToken,
       uploadUrl
     })
 
     expect(isNotNil(result?.fileId)).toBe(true)
+    expect(result?.fileName).toBe(fileName)
   })
 })

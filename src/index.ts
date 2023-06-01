@@ -1,16 +1,29 @@
 import { deepMerge, timestamp } from '@heyooo-inc/utils'
-import ky from 'ky'
-import { BinaryLike, createHash } from 'crypto'
+import { type BinaryLike, createHash } from 'crypto'
+import { OverridedAxiosInstance, createAxiosClient } from './axios'
+
+export * from './axios'
 
 export interface BackblazeB2Options {
   accountId: string
   masterApplicationKey: string
   refreshTokenInterval: number
   version: string
-  fetch?: {
+  requestOptions: {
     timeout?: number
-    retry?: number
+    retries?: number
   }
+}
+
+export interface BackblazeB2UploadUrlResult {
+  authorizationToken: string
+  uploadUrl: string
+}
+
+export interface BackblazeB2Authorization {
+  authorizationToken: string
+  downloadUrl: string
+  apiUrl: string
 }
 
 export interface BackblazeB2File {
@@ -42,12 +55,13 @@ export interface BackblazeB2File {
 type Optional<T, K extends keyof T> = Pick<T, Exclude<keyof T, K>> & { [P in K]?: T[P] }
 
 const authorizeUrl = 'https://api.backblazeb2.com/b2api/v2/b2_authorize_account'
+
 const defaultOptions: Partial<BackblazeB2Options> = {
   version: 'v2',
   refreshTokenInterval: 60 * 60, // 1 hour
-  fetch: {
+  requestOptions: {
     timeout: 5_000,
-    retry: 2
+    retries: 2
   }
 }
 
@@ -55,38 +69,33 @@ function sha1(content: BinaryLike) {
   return createHash('sha1').update(content).digest('hex')
 }
 
-function base64(text: string) {
-  return Buffer.from(text).toString('base64')
-}
-
 export class BackblazeB2 {
+  private readonly axiosClient: OverridedAxiosInstance
   private readonly options: BackblazeB2Options
   private authorizationToken?: string
   private downloadUrl?: string
   private apiUrl?: string
   private authorizedAt = 0
 
-  constructor(options: Optional<BackblazeB2Options, 'refreshTokenInterval' | 'version' | 'fetch'>) {
+  constructor(options: Optional<BackblazeB2Options, 'refreshTokenInterval' | 'version' | 'requestOptions'>) {
     this.options = deepMerge(defaultOptions, options) as BackblazeB2Options
+    this.axiosClient = createAxiosClient(this.options.requestOptions?.timeout, this.options.requestOptions?.retries)
   }
 
   public async getUploadUrl(bucketId: string) {
     await this.authorize()
 
-    return ky
-      .post(`${this.apiUrl}/b2_get_upload_url`, {
-        body: JSON.stringify({
-          bucketId
-        }),
+    return this.axiosClient.post<BackblazeB2UploadUrlResult>(
+      `${this.apiUrl}/b2_get_upload_url`,
+      {
+        bucketId
+      },
+      {
         headers: {
           Authorization: this.authorizationToken
-        },
-        ...this.options.fetch
-      })
-      .json<{
-        authorizationToken: string
-        uploadUrl: string
-      }>()
+        }
+      }
+    )
   }
 
   public async uploadFile(params: {
@@ -100,49 +109,42 @@ export class BackblazeB2 {
 
     const hash = sha1(params.file)
 
-    return ky
-      .post(params.uploadUrl, {
-        body: params.file,
-        headers: {
-          Authorization: params.authorizationToken,
-          'X-Bz-File-Name': encodeURI(params.fileName),
-          'X-Bz-Content-Sha1': hash,
-          'Content-Type': params.contentType || 'b2/x-auto',
-          'Content-Length': String(params.file.length)
-        },
-        ...this.options.fetch
-      })
-      .json<BackblazeB2File>()
+    return this.axiosClient.post<BackblazeB2File>(params.uploadUrl, params.file, {
+      headers: {
+        Authorization: params.authorizationToken,
+        'X-Bz-File-Name': encodeURI(params.fileName),
+        'X-Bz-Content-Sha1': hash,
+        'Content-Type': params.contentType || 'b2/x-auto',
+        'Content-Length': String(params.file.length)
+      }
+    })
   }
 
   public async deleteFileVersion(fileName: string, fileId: string) {
     await this.authorize()
 
-    return ky
-      .post(`${this.apiUrl}/b2_delete_file_version`, {
-        body: JSON.stringify({
-          fileName,
-          fileId
-        }),
+    return this.axiosClient.post(
+      `${this.apiUrl}/b2_delete_file_version`,
+      {
+        fileName,
+        fileId
+      },
+      {
         headers: {
           Authorization: this.authorizationToken
-        },
-        ...this.options.fetch
-      })
-      .json()
+        }
+      }
+    )
   }
 
   public async downloadFileById(fileId: string) {
     await this.authorize()
 
-    return ky
-      .get(`${this.downloadUrl}/b2api/v2/b2_download_file_by_id?fileId=${fileId}`, {
-        headers: {
-          Authorization: this.authorizationToken
-        },
-        ...this.options.fetch
-      })
-      .json()
+    return this.axiosClient.get(`${this.downloadUrl}/b2api/v2/b2_download_file_by_id?fileId=${fileId}`, {
+      headers: {
+        Authorization: this.authorizationToken
+      }
+    })
   }
 
   private async authorize() {
@@ -152,20 +154,15 @@ export class BackblazeB2 {
       return
     }
 
-    const { authorizationToken, downloadUrl, apiUrl } = await ky
-      .get(authorizeUrl, {
-        headers: {
-          Authorization: `Basic ${base64(
-            `${this.options.accountId}:${this.options.masterApplicationKey}`
-          )}`
-        },
-        ...this.options.fetch
-      })
-      .json<{
-        authorizationToken: string
-        downloadUrl: string
-        apiUrl: string
-      }>()
+    const { authorizationToken, downloadUrl, apiUrl } = await this.axiosClient.get<BackblazeB2Authorization>(
+      authorizeUrl,
+      {
+        auth: {
+          username: this.options.accountId,
+          password: this.options.masterApplicationKey
+        }
+      }
+    )
 
     this.authorizationToken = authorizationToken
     this.downloadUrl = downloadUrl

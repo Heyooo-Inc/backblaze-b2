@@ -1,6 +1,6 @@
 {
   "name": "@heyooo-inc/backblaze-b2",
-  "version": "0.0.0",
+  "version": "0.0.2",
   "description": "Backblaze B2 SDK",
   "author": "Heyooo-Inc",
   "license": "MIT",
@@ -21,7 +21,7 @@
     "cov": "jest --coverage",
     "type-check": "tsc --pretty --noEmit",
     "format": "prettier --write ./src",
-    "lint": "eslint . --ext .ts --quiet",
+    "lint": "eslint . --ext .ts --quiet --fix",
     "prebuild": "rimraf lib"
   },
   "husky": {
@@ -41,11 +41,12 @@
   },
   "dependencies": {
     "@heyooo-inc/utils": "^0.0.4",
-    "ky": "^0.33.3"
+    "axios": "^1.4.0",
+    "axios-retry": "^3.5.0"
   },
   "peerDependencies": {
     "@heyooo-inc/utils": "^0.0.4",
-    "ky": "^0.33.3"
+    "axios": "^1.4.0"
   },
   "devDependencies": {
     "@babel/preset-env": "^7.22.4",

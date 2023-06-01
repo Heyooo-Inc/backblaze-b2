@@ -9,6 +9,23 @@ Install the library with `npm install @heyooo-inc/backblaze-b2` or `pnpm install
 ## Usage
 
 ```js
+import { BackblazeB2 } from '@heyooo-inc/backblaze-b2'
+
+const b2 = new BackblazeB2({
+  accountId: ACCOUNT_ID,
+  masterApplicationKey: MASTER_APPLICATION_KEY
+})
+
+const { authorizationToken, uploadUrl } = await b2.getUploadUrl({
+  bucketId: BUCKET_ID
+})
+
+await b2.uploadFile({
+  authorizationToken,
+  uploadUrl,
+  fileName: 'test.txt',
+  fileContent: Buffer.from('test content')
+})
 ```
 
 ## Tests
